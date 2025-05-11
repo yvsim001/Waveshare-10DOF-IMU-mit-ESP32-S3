@@ -39,11 +39,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/Users/yvan2/workspace/ICM20948/build/bootloader/esp-idf/esp_hw_support/port/esp32s3/cmake_install.cmake")
+  include("C:/Users/yvan2/workspace/Pico10dof/Waveshare-10DOF-IMU-mit-ESP32-S3/build/bootloader/esp-idf/esp_hw_support/port/esp32s3/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/Users/yvan2/workspace/ICM20948/build/bootloader/esp-idf/esp_hw_support/lowpower/cmake_install.cmake")
+  include("C:/Users/yvan2/workspace/Pico10dof/Waveshare-10DOF-IMU-mit-ESP32-S3/build/bootloader/esp-idf/esp_hw_support/lowpower/cmake_install.cmake")
 endif()
 

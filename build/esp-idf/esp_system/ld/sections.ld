@@ -1,6 +1,6 @@
 /* Automatically generated file; DO NOT EDIT */
 /* Espressif IoT Development Framework Linker Script */
-/* Generated from: C:\Users\yvan2\workspace\ICM20948\build\esp-idf\esp_system\ld\sections.ld.in */
+/* Generated from: C:\Users\yvan2\workspace\Pico10dof\Waveshare-10DOF-IMU-mit-ESP32-S3\build\esp-idf\esp_system\ld\sections.ld.in */
 
 /*
 

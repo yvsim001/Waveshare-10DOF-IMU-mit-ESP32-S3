@@ -39,6 +39,6 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/Users/yvan2/workspace/ICM20948/build/esp-idf/mbedtls/mbedtls/cmake_install.cmake")
+  include("C:/Users/yvan2/workspace/Pico10dof/Waveshare-10DOF-IMU-mit-ESP32-S3/build/esp-idf/mbedtls/mbedtls/cmake_install.cmake")
 endif()
 

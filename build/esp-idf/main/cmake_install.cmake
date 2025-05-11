@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/yvan2/workspace/ICM20948/main
+# Install script for directory: C:/Users/yvan2/workspace/Pico10dof/Waveshare-10DOF-IMU-mit-ESP32-S3/main
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

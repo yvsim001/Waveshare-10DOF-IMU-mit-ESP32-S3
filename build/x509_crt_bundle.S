@@ -1,4 +1,4 @@
-/* * Data converted from C:/Users/yvan2/workspace/ICM20948/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from C:/Users/yvan2/workspace/Pico10dof/Waveshare-10DOF-IMU-mit-ESP32-S3/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 #if !defined (__APPLE__) && !defined (__linux__)
