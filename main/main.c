@@ -84,21 +84,21 @@ void select_bank(uint8_t bank) {
 
 void enable_fifo() {
     select_bank(BANK_0);
-
+	
     // Reset FIFO + Enable FIFO
     i2c_write_byte(SENSOR_ADDR, USER_CTRL, 0x44); // FIFO_EN | FIFO_RST
 
     vTaskDelay(pdMS_TO_TICKS(10)); // delay after reset
+    //FiFO Mode
+    i2c_write_byte(SENSOR_ADDR, 0x69, 0x00); //Mode Stream
     
-    
-    select_bank(BANK_2);
-    i2c_write_byte(SENSOR_ADDR, 0x01, 0x01); // 250dps, DLPF enabled
-    i2c_write_byte(SENSOR_ADDR, 0x14, 0x01); // 2g, DLPF enabled
-    select_bank(BANK_0);
+	//Slave FIFO Enable
+	//i2c_write_byte(SENSOR_ADDR, FIFO_EN_1, 0b1111);
+    // Activate accel and gyro (XYZ) in FIFO
+    i2c_write_byte(SENSOR_ADDR, FIFO_EN_2, 0x1E); // ACCEL_FIFO_EN + GYRO_X/Y/Z_EN --> Write accel and Gyro to FIFO
 
-    // Activer accel et gyro (XYZ) dans FIFO
-    i2c_write_byte(SENSOR_ADDR, FIFO_EN_2, 0x1e); // ACCEL_FIFO_EN + GYRO_X/Y/Z_EN
     
+   
 
 }
 
@@ -108,23 +108,29 @@ bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
     i2c_read_byte(SENSOR_ADDR, FIFO_COUNTL, &count_l);
     uint16_t fifo_count = (count_h << 8) | count_l;
 
-    if (fifo_count < ACCEL_GYRO_FIFO_FRAME_SIZE) {
-        return false; // not all data
-    }
+    if (fifo_count < ACCEL_GYRO_FIFO_FRAME_SIZE) return false;
 
+    // Burst read all FIFO data at once
     uint8_t raw_data[ACCEL_GYRO_FIFO_FRAME_SIZE];
-    for (int i = 0; i < ACCEL_GYRO_FIFO_FRAME_SIZE; i++) {
-        i2c_read_byte(SENSOR_ADDR, FIFO_R_W, &raw_data[i]);
-    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, FIFO_R_W, true);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (SENSOR_ADDR << 1) | I2C_MASTER_READ, true);
+    i2c_master_read(cmd, raw_data, ACCEL_GYRO_FIFO_FRAME_SIZE, I2C_MASTER_LAST_NACK);
+    i2c_master_stop(cmd);
+    i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
 
-    // Decoding of Daten (order = accelX,Y,Z --> gyroX,Y,Z)
+    // Parse data (accel X/Y/Z → gyro X/Y/Z)
     for (int i = 0; i < 3; i++) {
-        accel_xyz[i] = ((int16_t)raw_data[i * 2] << 8) | raw_data[i * 2 + 1];
-        gyro_xyz[i]  = ((int16_t)raw_data[6 + i * 2] << 8) | raw_data[6 + i * 2 + 1];
+        accel_xyz[i] = (raw_data[i*2] << 8) | raw_data[i*2 + 1];
+        gyro_xyz[i]  = (raw_data[6 + i*2] << 8) | raw_data[6 + i*2 + 1];
     }
-
     return true;
 }
+
 
 void app_main()
 {
@@ -153,15 +159,13 @@ void app_main()
     i2c_write_byte(SENSOR_ADDR, PWR_MGMT_1, CLK_RESET);
     
     
+    
     //Gyro + Accel config
-    //i2c_write_byte(SENSOR_ADDR, 0x7f, 0x20); //select bank 2
+    select_bank(BANK_2);
+    i2c_write_byte(SENSOR_ADDR, 0x01, 0x01); // 250dps, DLPF enabled
+    i2c_write_byte(SENSOR_ADDR, 0x14, 0x01); // 2g, DLPF enabled
+    select_bank(BANK_0);
     
-    //i2c_write_byte(SENSOR_ADDR, 0x01, 0x00); // set gyro scale to +/- 250dps
-    
-    //i2c_write_byte(SENSOR_ADDR, 0x14, 0x00); // set accel scale to +/- 2g
-    
-    //BANK_0
-    //i2c_write_byte(SENSOR_ADDR, 0x7f, 0x00); //select bank 0
     enable_fifo();
 	  
 	    
@@ -179,42 +183,3 @@ void app_main()
 
 }
 
-// Gyro + Accel config
-	    //i2c_write_byte(0x68, 0x7f, 0x20); //select bank 2
-	    
-	    //i2c_write_byte(0x68, 0x01, 0x00); // set gyro scale to +/- 250dps
-	    
-	    //i2c_write_byte(0x68, 0x14, 0x00); // set accel scale to +/- 2g
-	    
-	    /// Read Data 
-	    //i2c_write_byte(0x68, 0x7f, 0x00); //select bank 0
-		/*uint8_t accel_XOUTH , accel_XOUTL, accel_YOUTH , accel_YOUTL, accel_ZOUTH , accel_ZOUTL, gyro_XOUTH , gyro_XOUTL, gyro_YOUTH , gyro_YOUTL, gyro_ZOUTH , gyro_ZOUTL;
-	    
-	    i2c_read_byte(0x68, 0x2D,  &accel_XOUTH); 
-	    i2c_read_byte(0x68, 0x2E,  &accel_XOUTL);
-	    i2c_read_byte(0x68, 0x2F,  &accel_YOUTH); 
-	    i2c_read_byte(0x68, 0x30,  &accel_YOUTL);
-	    i2c_read_byte(0x68, 0x31,  &accel_ZOUTH); 
-	    i2c_read_byte(0x68, 0x32, &accel_ZOUTL);
-	  	// Combine bytes (signed 16-bit)
-		uint16_t accel_X = (accel_XOUTH << 8) | accel_XOUTL;
-		uint16_t accel_Y = (accel_YOUTH << 8) | accel_YOUTL;
-		uint16_t accel_Z = (accel_ZOUTH << 8) | accel_ZOUTL;
-		
-		//printf("Acceleration Value: X = %d, Y = %d, Z = %d\n", accel_X , accel_Y, accel_Z);
-	    i2c_read_byte(0x68, 0x33, &gyro_XOUTH);
-		i2c_read_byte(0x68, 0x34, &gyro_XOUTL);
-		i2c_read_byte(0x68, 0x35, &gyro_YOUTH);
-		i2c_read_byte(0x68, 0x36, &gyro_YOUTL);
-		i2c_read_byte(0x68, 0x37, &gyro_ZOUTH);
-		i2c_read_byte(0x68, 0x38, &gyro_ZOUTL);
-		
-		// Combinaison des valeurs hautes et basses
-		uint16_t gyro_X = (gyro_XOUTH << 8) | gyro_XOUTL;
-		uint16_t gyro_Y = (gyro_YOUTH << 8) | gyro_YOUTL;
-		uint16_t gyro_Z = (gyro_ZOUTH << 8) | gyro_ZOUTL;
-		
-		//printf("Gyroscope Value: X = %d, Y = %d, Z = %d\n", gyro_X, gyro_Y, gyro_Z);
-		uint64_t timestamp_ms = esp_timer_get_time() / 1000;
-		printf("%llu %d %d %d %d %d %d\n", timestamp_ms, accel_X, accel_Y, accel_Z, gyro_X, gyro_Y, gyro_Z);
-		vTaskDelay(pdMS_TO_TICKS(100));*/
