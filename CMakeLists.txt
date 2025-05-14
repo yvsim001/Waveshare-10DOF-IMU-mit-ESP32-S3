@@ -2,7 +2,8 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(EXTRA_COMPONENT_DIRS "C:/Espressif/frameworks/esp-idf-v5.3.1/components")
+set(EXTRA_COMPONENT_DIRS "C:/Users/FHBBook/Documents/Espressif/esp-idf-v5.4.1/components")
+
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(app-template)

@@ -8,4 +8,5 @@ idf_component_register(
     REQUIRES           # optional, list the public requirements (component names)
     PRIV_REQUIRES       # optional, list the private requirements
 )
-set(EXTRA_COMPONENT_DIRS "C:/Espressif/frameworks/esp-idf-v5.3.1/components")
+set(EXTRA_COMPONENT_DIRS "C:/Users/FHBBook/Documents/Espressif/esp-idf-v5.4.1/components")
+
