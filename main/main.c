@@ -452,9 +452,11 @@ void app_main()
     select_bank(REG_VAL_REG_BANK_0);
     
 	vTaskDelay(pdMS_TO_TICKS(100));
-	
+
     enable_fifo();
 	  
+    // OFFSET GYRO
+    icm20948GyroOffset(void);  
 	    
     while(1)
     {
