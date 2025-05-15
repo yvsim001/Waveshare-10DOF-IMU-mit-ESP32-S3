@@ -1,3 +1,9 @@
+/**
+ * @file main.c
+ * @author Yvan Valder SIMO GUENO
+ * @date 15/05/2025
+ * @brief File containing example of ICM20948 usage with ESP32S3.
+ */
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -117,12 +123,21 @@ int16_t gstGyros16X, gstGyros16Y, gstGyros16Z;
 
 static const char *TAG = "i2c_example";
 
+/**
+ * @brief Structure used for the sliding average of sensor values.
+ * 
+ */
 typedef struct icm20948_st_avg_data_tag
 	{
-	  uint8_t u8Index;
-		int16_t s16AvgBuffer[8];
+	  uint8_t u8Index;           /**< Circular pad index*/
+		int16_t s16AvgBuffer[8]; /**< Last 8 values stamp.*/
 	}ICM20948_ST_AVG_DATA;
 	
+/**
+ * @brief Initializes the I2C bus.
+ *
+ * This function configures the I2C pins and frequency.
+ */
 void i2c_master_init()
 {
     i2c_config_t conf = {
@@ -139,6 +154,23 @@ void i2c_master_init()
                        I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
+/**
+ * @brief Writes a single byte to a register of an I2C device.
+ *
+ * This function performs an I2C write operation to a specific register
+ * of a given I2C device. It sends a start condition, writes the device
+ * address, the register address, and the data byte, followed by a stop condition.
+ *
+ * @param device_addr 7-bit I2C address of the device.
+ * @param reg_addr Address of the register to write to.
+ * @param data The byte value to write to the register.
+ *
+ * @return
+ * - `ESP_OK` if the write operation was successful.
+ * - An appropriate error code (`esp_err_t`) if the operation failed.
+ *
+ * @note This function uses I2C port `I2C_NUM_0` and a timeout of 1000 ms.
+ */
 esp_err_t i2c_write_byte(uint8_t device_addr, uint8_t reg_addr, uint8_t data) {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -151,6 +183,23 @@ esp_err_t i2c_write_byte(uint8_t device_addr, uint8_t reg_addr, uint8_t data) {
     return ret;
 }
 
+/**
+ * @brief Reads a single byte from a register of an I2C device.
+ *
+ * This function performs an I2C read operation from a specific register
+ * of a given I2C device. It handles the start condition, device addressing,
+ * register selection, repeated start, reading, and stop condition.
+ *
+ * @param device_addr 7-bit I2C address of the device.
+ * @param reg_addr Address of the register to read from.
+ * @param[out] data Pointer to a variable where the read byte will be stored.
+ *
+ * @return
+ * - `ESP_OK` if the read operation was successful.
+ * - An appropriate error code (`esp_err_t`) if the operation failed.
+ *
+ * @note This function uses I2C port `I2C_NUM_0` and a timeout of 1000 ms.
+ */
 esp_err_t i2c_read_byte(uint8_t device_addr, uint8_t reg_addr, uint8_t *data) {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -165,10 +214,33 @@ esp_err_t i2c_read_byte(uint8_t device_addr, uint8_t reg_addr, uint8_t *data) {
     return ret;
 }
 
+/**
+ * @brief Selects a register bank on the sensor.
+ *
+ * This function writes the desired bank value to the register bank selection
+ * register of the sensor, allowing access to different sets of registers.
+ *
+ * @param bank The register bank number to select.
+ *
+ * @note This function uses `i2c_write_byte()` to perform the I2C communication.
+ */
 void select_bank(uint8_t bank) {
     i2c_write_byte(SENSOR_ADDR, REG_ADD_REG_BANK_SEL, bank);
 }
 
+/**
+ * @brief Enables the FIFO buffer on the sensor and configures it for accelerometer and gyroscope data.
+ *
+ * This function:
+ * - Selects register bank 0.
+ * - Resets and enables the FIFO.
+ * - Sets the FIFO mode to Stream mode.
+ * - Enables accelerometer and gyroscope (X, Y, Z axes) data to be written into the FIFO.
+ *
+ * A short delay is added after resetting the FIFO to ensure proper initialization.
+ *
+ * @note This function uses `i2c_write_byte()` and `select_bank()` for I2C communication.
+ */
 void enable_fifo() {
     select_bank(REG_VAL_REG_BANK_0);
 	
@@ -184,6 +256,20 @@ void enable_fifo() {
     i2c_write_byte(SENSOR_ADDR, FIFO_EN_2, 0x1E); // ACCEL_FIFO_EN + GYRO_X/Y/Z_EN --> Write accel and Gyro to FIFO
 
 }
+
+/**
+ * @brief Calculates a moving average over 8 values for input data.
+ *
+ * This function stores the incoming 16-bit value (`InVal`) into a circular buffer (`pAvgBuffer`)
+ * and computes the average of the last 8 stored values. The result is returned in `pOutVal`.
+ *
+ * @param[in,out] pIndex     Pointer to the current index in the circular buffer (0–7). Automatically incremented and wrapped.
+ * @param[in,out] pAvgBuffer Pointer to the 8-element buffer used to store past values.
+ * @param[in]     InVal      New input value to insert into the buffer.
+ * @param[out]    pOutVal    Pointer to the output value where the average result will be stored.
+ *
+ * @note This function assumes `pAvgBuffer` has space for at least 8 elements.
+ */
 void icm20948CalAvgValue(uint8_t *pIndex, int16_t *pAvgBuffer, int16_t InVal, int32_t *pOutVal)
 { 
   uint8_t i;
@@ -199,6 +285,27 @@ void icm20948CalAvgValue(uint8_t *pIndex, int16_t *pAvgBuffer, int16_t InVal, in
     *pOutVal >>= 3;
 }
 
+/**
+ * @brief Reads and processes a single sample of accelerometer and gyroscope data from the ICM20948 FIFO buffer.
+ *
+ * This function:
+ * - Checks if enough data is available in the FIFO.
+ * - Performs a burst read of one data frame (accelerometer + gyroscope).
+ * - Parses the raw data into 3-axis accelerometer and gyroscope values.
+ * - Applies an 8-sample moving average filter on both accel and gyro data.
+ * - Applies bias correction and scaling:
+ *   - Gyroscope (±1000 dps): sensitivity 32.8 LSB/dps
+ *   - Accelerometer (±2 g): sensitivity 16384 LSB/g
+ *
+ * @param[out] accel_xyz  Pointer to an array of 3 elements to receive filtered X, Y, Z accelerometer values in g.
+ * @param[out] gyro_xyz   Pointer to an array of 3 elements to receive filtered X, Y, Z gyroscope values in dps.
+ *
+ * @return true if a valid frame was read and processed, false if not enough data was available in the FIFO.
+ *
+ * @note This function assumes the FIFO contains ACCEL_GYRO_FIFO_FRAME_SIZE bytes per sample.
+ * @note `gstGyros16X`, `gstGyros16Y` are used for static bias removal from gyroscope readings.
+ * @note The function uses static buffers for averaging, so it maintains state across calls.
+ */
 bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
     uint8_t count_h, count_l;
     i2c_read_byte(SENSOR_ADDR, FIFO_COUNTH, &count_h);
@@ -259,6 +366,20 @@ bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
     return true;
 }
 
+/**
+ * @brief Calibrates the gyroscope offset by averaging multiple samples.
+ * 
+ * This function reads 32 samples from the FIFO buffer to compute the average 
+ * offset values for the gyroscope axes (X, Y, Z). The averaged offsets are 
+ * stored in the global variables `gstGyros16X`, `gstGyros16Y`, and `gstGyros16Z`.
+ * 
+ * Local variables `accel_0` and `gyro_0` hold the raw accelerometer and 
+ * gyroscope samples read from the FIFO. These are used to calculate the 
+ * average gyro offsets without modifying any global sensor data during the 
+ * calibration process.
+ * 
+ * Each sample is read with a 10 ms delay between readings to allow sensor data to update.
+ */
 void icm20948GyroOffset(void)
 {
   uint8_t i;
@@ -267,9 +388,9 @@ void icm20948GyroOffset(void)
   for(i = 0; i < 32; i ++)
   {
     read_fifo_sample(accel_0, gyro_0);
-    s32TempGx += gyro[0];
-    s32TempGy += gyro[1];
-    s32TempGz += gyro[2];
+    s32TempGx += gyro_0[0];
+    s32TempGy += gyro_0[1];
+    s32TempGz += gyro_0[2];
 	vTaskDelay(pdMS_TO_TICKS(10));
   }
   
@@ -280,7 +401,20 @@ void icm20948GyroOffset(void)
 }
 
 
-
+/**
+ * @brief Main application entry point.
+ * 
+ * Initializes the I2C master interface, configures the ICM20948 sensor,
+ * sets up the gyroscope and accelerometer with desired sample rates and
+ * filters, enables the FIFO for data collection, and continuously reads
+ * sensor data in a loop.
+ * 
+ * The sensor identification register (WIA) is read to verify communication.
+ * The device is reset and set to run mode before configuring gyro and accel.
+ * 
+ * In the infinite loop, sensor data is read from the FIFO buffer every 100 ms,
+ * and acceleration and gyro values are printed with a timestamp in milliseconds.
+ */
 void app_main()
 {
     i2c_master_init();
