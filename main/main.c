@@ -456,7 +456,7 @@ void app_main()
     enable_fifo();
 	  
     // OFFSET GYRO
-    icm20948GyroOffset(void);  
+    icm20948GyroOffset();  
 	    
     while(1)
     {
