@@ -396,8 +396,10 @@ void icm20948GyroOffset(void)
   s32TempGx /= 32;
   s32TempGy /= 32;
   s32TempGz /= 32;
-  //Gyro and Offset calibration !!!!! ToDO
+  //Gyro and Offset calibration [selct the true bank for the offset register] !!!!! ToDO
+  //https://invensense.tdk.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf
   // https://github.com/mokhwasomssi/stm32_hal_icm20948/blob/master/stm32f411_fw_icm20948/ICM20948/icm20948.c
+  // i have to get a calibration than try a good formel
   gstGyros16X = s32TempGx >> 5;
   gstGyros16Y = s32TempGy >> 5;
   gstGyros16Z = s32TempGz >> 5;
