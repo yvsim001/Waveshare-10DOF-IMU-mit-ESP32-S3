@@ -393,7 +393,11 @@ void icm20948GyroOffset(void)
     s32TempGz += gyro_0[2];
 	vTaskDelay(pdMS_TO_TICKS(10));
   }
-  
+  s32TempGx /= 32;
+  s32TempGy /= 32;
+  s32TempGz /= 32;
+  //Gyro and Offset calibration !!!!! ToDO
+  // https://github.com/mokhwasomssi/stm32_hal_icm20948/blob/master/stm32f411_fw_icm20948/ICM20948/icm20948.c
   gstGyros16X = s32TempGx >> 5;
   gstGyros16Y = s32TempGy >> 5;
   gstGyros16Z = s32TempGz >> 5;
