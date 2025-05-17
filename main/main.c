@@ -55,6 +55,13 @@
 #define REG_VAL_REG_BANK_1          0x10
 #define REG_VAL_REG_BANK_2          0x20
 #define REG_VAL_REG_BANK_3          0x30
+#define REG_ADD_XA_OFFS_H           0x14
+#define REG_ADD_XA_OFFS_L           0x15
+#define REG_ADD_YA_OFFS_H           0x17
+#define REG_ADD_YA_OFFS_L           0x18
+#define REG_ADD_ZA_OFFS_H           0x1A
+#define REG_ADD_ZA_OFFS_L           0x1B
+
 
 /* user bank 2 register */
 #define REG_ADD_GYRO_SMPLRT_DIV     0x00
@@ -77,6 +84,12 @@
 #define REG_VAL_BIT_ACCEL_FS_8g     0x04 /* bit[2:1] */
 #define REG_VAL_BIT_ACCEL_FS_16g    0x06 /* bit[2:1] */
 #define REG_VAL_BIT_ACCEL_DLPF      0x01 /* bit[0]   */
+#define REG_ADD_XG_OFFS_USRH        0x03
+#define REG_ADD_XG_OFFS_USRL        0x04
+#define REG_ADD_YG_OFFS_USRH        0x05
+#define REG_ADD_YG_OFFS_USRL        0x06
+#define REG_ADD_ZG_OFFS_USRH        0x07
+#define REG_ADD_ZG_OFFS_USRL        0x08
 
 /* user bank 3 register */
 #define REG_ADD_I2C_SLV0_ADDR       0x03
@@ -119,7 +132,6 @@
 #define ACCEL_GYRO_FIFO_FRAME_SIZE 12 // 6 value × 2 octets (accel + gyro)
 
 float accel[3], gyro[3];
-int16_t gstGyros16X, gstGyros16Y, gstGyros16Z;
 
 static const char *TAG = "i2c_example";
 
@@ -345,9 +357,9 @@ bool read_fifo_sample(float *accel_xyz, float *gyro_xyz) {
 	    {
 	        icm20948CalAvgValue(&sstAvgBuf[i].u8Index, sstAvgBuf[i].s16AvgBuffer, gyro_xyz[i], s32OutBuf + i);
 	    }
-	gyro_xyz[0]= s32OutBuf[0] -gstGyros16X;
-	gyro_xyz[1]= s32OutBuf[1] -gstGyros16Y;
-	gyro_xyz[2]= s32OutBuf[2] -gstGyros16X;
+	gyro_xyz[0]= s32OutBuf[0] 
+	gyro_xyz[1]= s32OutBuf[1] 
+	gyro_xyz[2]= s32OutBuf[2] 
 	//For gyro_1000dps ----> gyro_sensitivity= 32.8—---->s.11 3.1 GYROSCOPE SPECIFICATIONS
 	gyro_xyz[0]=gyro_xyz[0]/32.8;
 	gyro_xyz[1]=gyro_xyz[1]/32.8;
@@ -371,9 +383,9 @@ bool read_fifo_sample(float *accel_xyz, float *gyro_xyz) {
 /**
  * @brief Calibrates the gyroscope offset by averaging multiple samples.
  * 
- * This function reads 32 samples from the FIFO buffer to compute the average 
+ * This function reads 100 samples from the FIFO buffer to compute the average 
  * offset values for the gyroscope axes (X, Y, Z). The averaged offsets are 
- * stored in the global variables `gstGyros16X`, `gstGyros16Y`, and `gstGyros16Z`.
+ * written to the sensor's offset registers.
  * 
  * Local variables `accel_0` and `gyro_0` hold the raw accelerometer and 
  * gyroscope samples read from the FIFO. These are used to calculate the 
@@ -381,33 +393,116 @@ bool read_fifo_sample(float *accel_xyz, float *gyro_xyz) {
  * calibration process.
  * 
  * Each sample is read with a 10 ms delay between readings to allow sensor data to update.
- */
-void icm20948GyroOffset(void)
+*/
+void icm20948GyroCalibration(void)
 {
   uint8_t i;
   float accel_0[3], gyro_0[3];
-  int32_t s32TempGx = 0, s32TempGy = 0, s32TempGz = 0;
-  for(i = 0; i < 32; i ++)
+  int32_t gyro_bias[3] = {0};
+  uint8_t gyro_offset[6] = {0};
+  // Read 100 samples from the FIFO buffer to compute the average gyro offsets
+  for(i = 0; i < 100; i ++)
   {
     read_fifo_sample(accel_0, gyro_0);
-    s32TempGx += gyro_0[0];
-    s32TempGy += gyro_0[1];
-    s32TempGz += gyro_0[2];
+    gyro_bias[0] += gyro_0[0];
+    gyro_bias[1] += gyro_0[1];
+    gyro_bias[2] += gyro_0[2];
 	vTaskDelay(pdMS_TO_TICKS(10));
   }
-  s32TempGx /= 32;
-  s32TempGy /= 32;
-  s32TempGz /= 32;
+  gyro_bias[0] /= 100;
+  gyro_bias[1] /= 100;
+  gyro_bias[2] /= 100;
   //Gyro and Offset calibration [selct the true bank for the offset register] !!!!! ToDO
   //https://invensense.tdk.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf
   // https://github.com/mokhwasomssi/stm32_hal_icm20948/blob/master/stm32f411_fw_icm20948/ICM20948/icm20948.c
+  
   // i have to get a calibration than try a good formel
-  gstGyros16X = s32TempGx >> 5;
-  gstGyros16Y = s32TempGy >> 5;
-  gstGyros16Z = s32TempGz >> 5;
+  // Construct the gyro biases for push to the hardware gyro bias registers,
+  // which are reset to zero upon device startup.
+  // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format.
+  // Biases are additive, so change sign on calculated average gyro biases
+  gyro_offset[0] = (-gyro_bias[0] / 4  >> 8) & 0xFF; 
+  gyro_offset[1] = (-gyro_bias[0] / 4)       & 0xFF; 
+  gyro_offset[2] = (-gyro_bias[1] / 4  >> 8) & 0xFF;
+  gyro_offset[3] = (-gyro_bias[1] / 4)       & 0xFF;
+  gyro_offset[4] = (-gyro_bias[2] / 4  >> 8) & 0xFF;
+  gyro_offset[5] = (-gyro_bias[2] / 4)       & 0xFF;
+  
+  // Write the gyro biases to the hardware registers
+  select_bank(REG_VAL_REG_BANK_2);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_XG_OFFS_USRH, gyro_offset[0]);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_XG_OFFS_USRL, gyro_offset[1]);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_YG_OFFS_USRH, gyro_offset[2]);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_YG_OFFS_USRL, gyro_offset[3]);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_ZG_OFFS_USRH, gyro_offset[4]);
+  i2c_write_byte(SENSOR_ADDR, REG_ADD_ZG_OFFS_USRL, gyro_offset[5]);
+  select_bank(REG_VAL_REG_BANK_0);
+  // Set the gyro bias registers to the calculated values
+
+
   return;
 }
-
+/**
+ * @brief Calibrates the accelerometer offset by averaging multiple samples.
+ * 
+ * This function reads 100 samples from the FIFO buffer to compute the average
+ * offset values for the accelerometer axes (X, Y, Z). The averaged offsets are
+ * written to the sensor's offset registers.
+ * 
+ * Local variables `accel_0` and `gyro_0` hold the raw accelerometer and
+ * gyroscope samples read from the FIFO. These are used to calculate the
+ * average accel offsets without modifying any global sensor data during the
+ * calibration process.
+ *  
+ * Each sample is read with a 10 ms delay between readings to allow sensor data to update.
+ *  
+ * The function constructs the offset values for the accelerometer and writes them to the
+ * sensor's offset registers. The offsets are calculated by dividing the average
+ * acceleration values by 4 and converting them to the appropriate format for the sensor.
+ * 
+ */
+void icm20948AccelCalibration(void)
+{
+    uint8_t i;
+    float accel_0[3], gyro_0[3];
+    int32_t accel_bias[3] = {0};
+    uint8_t accel_offset[6] = {0};
+    // Read 100 samples from the FIFO buffer to compute the average accel offsets
+    for(i = 0; i < 100; i ++)
+    {
+        read_fifo_sample(accel_0, gyro_0);
+        accel_bias[0] += accel_0[0];
+        accel_bias[1] += accel_0[1];
+        accel_bias[2] += accel_0[2];
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    accel_bias[0] /= 100;
+    accel_bias[1] /= 100;
+    accel_bias[2] /= 100;
+    
+    
+    // Construct the gyro biases for push to the hardware gyro bias registers,
+    // which are reset to zero upon device startup.
+    // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format.
+    // Biases are additive, so change sign on calculated average gyro biases
+    accel_offset[0] = (-accel_bias[0] / 4 >> 8) & 0xFF; 
+    accel_offset[1] = (-accel_bias[0] / 4)       & 0xFF; 
+    accel_offset[2] = (-accel_bias[1] / 4 >> 8) & 0xFF;
+    accel_offset[3] = (-accel_bias[1] /4)       & 0xFF;
+    accel_offset[4] = (-accel_bias[2] /4 >>8) & 0xFF;
+    accel_offset[5] = (-accel_bias[2] /4)       & 0xFF;
+    
+    
+    select_bank(REG_VAL_REG_BANK_1);
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_H, accel_offset[0]);
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_L, accel_offset[1]);
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_YA_OFFS_H, accel_offset[2]);
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_YA_OFFS_L, accel_offset[3]);
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_ZA_OFFS_H, accel_offset[4]);   
+    i2c_write_byte(SENSOR_ADDR, REG_ADD_ZA_OFFS_L, accel_offset[5]);
+    select_bank(REG_VAL_REG_BANK_0);
+    return;
+}
 
 /**
  * @brief Main application entry point.
@@ -464,7 +559,9 @@ void app_main()
     enable_fifo();
 	  
     // OFFSET GYRO
-    icm20948GyroOffset();  
+    icm20948GyroCalibration();  
+    // OFFSET ACCEL
+    icm20948AccelCalibration();
 	    
     while(1)
     {
