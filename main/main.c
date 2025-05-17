@@ -22,9 +22,9 @@
 #define SENSOR_ADDR                 0x68
 
 /* user bank 1 register */
-#define REG_ADD_WIA 		    0x00
+#define REG_ADD_WIA 		    	0x00
 #define REG_VAL_WIA                 0xEA
-#define REG_ADD_USER_CTRL 	    0x03
+#define REG_ADD_USER_CTRL 	    	0x03
 #define REG_VAL_BIT_DMP_EN          0x80
 #define REG_VAL_BIT_FIFO_EN         0x40
 #define REG_VAL_BIT_I2C_MST_EN      0x20
@@ -118,7 +118,7 @@
 
 #define ACCEL_GYRO_FIFO_FRAME_SIZE 12 // 6 value × 2 octets (accel + gyro)
 
-int16_t accel[3], gyro[3];
+float accel[3], gyro[3];
 int16_t gstGyros16X, gstGyros16Y, gstGyros16Z;
 
 static const char *TAG = "i2c_example";
@@ -244,14 +244,16 @@ void select_bank(uint8_t bank) {
 void enable_fifo() {
     select_bank(REG_VAL_REG_BANK_0);
 	
-    // Reset FIFO + Enable FIFO
-    i2c_write_byte(SENSOR_ADDR, REG_ADD_USER_CTRL, 0x44); // FIFO_EN | FIFO_RST
-    vTaskDelay(pdMS_TO_TICKS(10)); // delay after reset
+   //Reset FIFO
+	i2c_write_byte(SENSOR_ADDR, 0x68, 0x1F);
+	vTaskDelay(pdMS_TO_TICKS(10)); // delay after reset
+	i2c_write_byte(SENSOR_ADDR, 0x68, 0x00);
+	vTaskDelay(pdMS_TO_TICKS(15));
     //FiFO Mode
     i2c_write_byte(SENSOR_ADDR, 0x69, 0x00); //Mode Stream
     
-	//Slave FIFO Enable
-	//i2c_write_byte(SENSOR_ADDR, FIFO_EN_1, 0b1111);
+	// Enable FIFO
+	i2c_write_byte(SENSOR_ADDR, REG_ADD_USER_CTRL, REG_VAL_BIT_FIFO_EN); // FIFO_EN  
     // Activate accel and gyro (XYZ) in FIFO
     i2c_write_byte(SENSOR_ADDR, FIFO_EN_2, 0x1E); // ACCEL_FIFO_EN + GYRO_X/Y/Z_EN --> Write accel and Gyro to FIFO
 
@@ -306,7 +308,7 @@ void icm20948CalAvgValue(uint8_t *pIndex, int16_t *pAvgBuffer, int16_t InVal, in
  * @note `gstGyros16X`, `gstGyros16Y` are used for static bias removal from gyroscope readings.
  * @note The function uses static buffers for averaging, so it maintains state across calls.
  */
-bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
+bool read_fifo_sample(float *accel_xyz, float *gyro_xyz) {
     uint8_t count_h, count_l;
     i2c_read_byte(SENSOR_ADDR, FIFO_COUNTH, &count_h);
     i2c_read_byte(SENSOR_ADDR, FIFO_COUNTL, &count_l);
@@ -360,9 +362,9 @@ bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
 	accel_xyz[1] = s32OutBuf1[1];
 	accel_xyz[2] = s32OutBuf1[2];
 	//For accel_2g ---->accel_sensitivity=16384-------------->s.12 3.2 ACCELEROMETER SPECIFICATIONS
-	accel_xyz[0] = accel_xyz[0]/16384;
-	accel_xyz[1] = accel_xyz[1]/16384;
-	accel_xyz[2] = accel_xyz[2]/16384;
+	accel_xyz[0] = accel_xyz[0]/16384.0;
+	accel_xyz[1] = accel_xyz[1]/16384.0;
+	accel_xyz[2] = accel_xyz[2]/16384.0;
     return true;
 }
 
@@ -383,7 +385,7 @@ bool read_fifo_sample(int16_t *accel_xyz, int16_t *gyro_xyz) {
 void icm20948GyroOffset(void)
 {
   uint8_t i;
-  int16_t accel_0[3], gyro_0[3];
+  float accel_0[3], gyro_0[3];
   int32_t s32TempGx = 0, s32TempGy = 0, s32TempGz = 0;
   for(i = 0; i < 32; i ++)
   {
@@ -464,7 +466,7 @@ void app_main()
 		
     	uint64_t timestamp_ms = esp_timer_get_time() / 1000;
     	if (read_fifo_sample(accel, gyro)) {
-    		printf("%llu %d %d %d %d %d %d\n", timestamp_ms, accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2]);
+    		printf("%llu %.2f %.2f %.2f %.2f %.2f %.2f\n", timestamp_ms, accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2]);
     	    }
     	vTaskDelay(pdMS_TO_TICKS(100));
 
