@@ -574,6 +574,24 @@ void app_main()
     	vTaskDelay(pdMS_TO_TICKS(100));
 
 	}
+	//May be a watchdog Reset wdt_reset() to prevent readings error
+	/**
+	 * @brief Initializes the watchdog timer to reset after 8 seconds
+	 *        and enables the WDT interrupt.
+	 */
+	/*
+	void init_wdt() {
+	    // Reset the watchdog timer to prevent immediate reset
+	    wdt_reset();
+	
+	    // Enable the watchdog timer with a timeout of 2 seconds
+	    wdt_enable(WDTO_1S);
+	
+	    // Enable the watchdog timer interrupt
+	    WDTCR |= (1 << WDE);
+	*/
+}
+
 
 }
 
