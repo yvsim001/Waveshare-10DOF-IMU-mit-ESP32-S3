@@ -353,20 +353,20 @@ bool read_fifo_sample(float *accel_xyz, float *gyro_xyz) {
     static ICM20948_ST_AVG_DATA sstAvgBuf[3];
 	static ICM20948_ST_AVG_DATA sstAvgBuf1[3];
 
-	for(uint8_t i = 0; i < 3; i ++) 
+	for(uint8_t i = 0; i < 3; i++) 
 	    {
 	        icm20948CalAvgValue(&sstAvgBuf[i].u8Index, sstAvgBuf[i].s16AvgBuffer, gyro_xyz[i], s32OutBuf + i);
 	    }
-	gyro_xyz[0]= s32OutBuf[0] 
-	gyro_xyz[1]= s32OutBuf[1] 
-	gyro_xyz[2]= s32OutBuf[2] 
+	gyro_xyz[0]= s32OutBuf[0];
+	gyro_xyz[1]= s32OutBuf[1];
+	gyro_xyz[2]= s32OutBuf[2];
 	//For gyro_1000dps ----> gyro_sensitivity= 32.8—---->s.11 3.1 GYROSCOPE SPECIFICATIONS
 	gyro_xyz[0]=gyro_xyz[0]/32.8;
 	gyro_xyz[1]=gyro_xyz[1]/32.8;
 	gyro_xyz[2]=gyro_xyz[2]/32.8;
 
 	
-	for(uint8_t i = 0; i < 3; i ++) 
+	for(uint8_t i = 0; i < 3; i++) 
 	    {
 	        icm20948CalAvgValue(&sstAvgBuf1[i].u8Index, sstAvgBuf1[i].s16AvgBuffer, accel_xyz[i], s32OutBuf1 + i);
 	    }
@@ -416,18 +416,22 @@ void icm20948GyroCalibration(void)
   //https://invensense.tdk.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf
   // https://github.com/mokhwasomssi/stm32_hal_icm20948/blob/master/stm32f411_fw_icm20948/ICM20948/icm20948.c
   
-  // i have to get a calibration than try a good formel
-  // Construct the gyro biases for push to the hardware gyro bias registers,
-  // which are reset to zero upon device startup.
-  // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format.
-  // Biases are additive, so change sign on calculated average gyro biases
-  gyro_offset[0] = (-gyro_bias[0] / 4  >> 8) & 0xFF; 
-  gyro_offset[1] = (-gyro_bias[0] / 4)       & 0xFF; 
-  gyro_offset[2] = (-gyro_bias[1] / 4  >> 8) & 0xFF;
-  gyro_offset[3] = (-gyro_bias[1] / 4)       & 0xFF;
-  gyro_offset[4] = (-gyro_bias[2] / 4  >> 8) & 0xFF;
-  gyro_offset[5] = (-gyro_bias[2] / 4)       & 0xFF;
-  
+    // Calculate the new offset values by subtracting the average gyro bias
+    // Divide by 8 to get 32 LSB/dps to conform to expected bias input format
+    gyro_bias[0] -= (gyro_bias[0] / 8);
+    gyro_bias[1] -= (gyro_bias[1] / 8);
+    gyro_bias[2] -= (gyro_bias[2] / 8);
+    // Convert the bias values to the appropriate format for the sensor
+    gyro_offset[0] = (gyro_bias[0] >> 8) & 0xFF;
+    gyro_offset[1] = (gyro_bias[0]) & 0xFE;
+    gyro_offset[1] = gyro_offset[1] | (gyro_bias[0] & 0x01);
+    gyro_offset[2] = (gyro_bias[1] >> 8) & 0xFF;
+    gyro_offset[3] = (gyro_bias[1]) & 0xFE;
+    gyro_offset[3] = gyro_offset[3] | (gyro_bias[1] & 0x01);
+    gyro_offset[4] = (gyro_bias[2] >> 8) & 0xFF;
+    gyro_offset[5] = (gyro_bias[2]) & 0xFE;
+    gyro_offset[5] = gyro_offset[5] | (gyro_bias[2] & 0x01);
+    
   // Write the gyro biases to the hardware registers
   select_bank(REG_VAL_REG_BANK_2);
   i2c_write_byte(SENSOR_ADDR, REG_ADD_XG_OFFS_USRH, gyro_offset[0]);
@@ -464,9 +468,20 @@ void icm20948GyroCalibration(void)
 void icm20948AccelCalibration(void)
 {
     uint8_t i;
+
+	uint8_t temp2_0;
+    uint8_t temp2_1;
+    uint8_t temp3_0;
+    uint8_t temp3_1;
+    uint8_t temp4_0;
+    uint8_t temp4_1;
+
+	
+	
     float accel_0[3], gyro_0[3];
     int32_t accel_bias[3] = {0};
     uint8_t accel_offset[6] = {0};
+	int32_t accel_bias_reg[3] = {0};
     // Read 100 samples from the FIFO buffer to compute the average accel offsets
     for(i = 0; i < 100; i ++)
     {
@@ -480,20 +495,51 @@ void icm20948AccelCalibration(void)
     accel_bias[1] /= 100;
     accel_bias[2] /= 100;
     
-    
-    // Construct the gyro biases for push to the hardware gyro bias registers,
-    // which are reset to zero upon device startup.
-    // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format.
-    // Biases are additive, so change sign on calculated average gyro biases
-    accel_offset[0] = (-accel_bias[0] / 4 >> 8) & 0xFF; 
-    accel_offset[1] = (-accel_bias[0] / 4)       & 0xFF; 
-    accel_offset[2] = (-accel_bias[1] / 4 >> 8) & 0xFF;
-    accel_offset[3] = (-accel_bias[1] /4)       & 0xFF;
-    accel_offset[4] = (-accel_bias[2] /4 >>8) & 0xFF;
-    accel_offset[5] = (-accel_bias[2] /4)       & 0xFF;
-    
+	uint8_t mask_bit[3] = {0, 0, 0};
+	
     
     select_bank(REG_VAL_REG_BANK_1);
+
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_H, &temp2_0);
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_L, &temp2_1);
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_YA_OFFS_H, &temp3_0);
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_YA_OFFS_L, &temp3_1);
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_ZA_OFFS_H, &temp4_0);
+    i2c_read_byte(SENSOR_ADDR, REG_ADD_ZA_OFFS_L, &temp4_1);
+    // Read the current offset values from the sensor
+    accel_bias_reg[0] = ((int16_t)temp2_0 << 8) | (temp2_1 & 0xFE);
+    accel_bias_reg[1] = ((int16_t)temp3_0 << 8) | (temp3_1 & 0xFE);
+    accel_bias_reg[2] = ((int16_t)temp4_0 << 8) | (temp4_1 & 0xFE);
+    // Check the sign of the offset values and set the mask bits accordingly
+    if (accel_bias_reg[0] & 0x01) {
+        mask_bit[0] = 0x01;
+    }
+    if (accel_bias_reg[1] & 0x01) {
+        mask_bit[1] = 0x01;
+    }
+    if (accel_bias_reg[2] & 0x01) {
+        mask_bit[2] = 0x01;
+    }
+    // Calculate the new offset values by subtracting the average accel bias
+    // Divide by 8 to get 16384 LSB/g to conform to expected bias input format
+
+
+    accel_bias_reg[0] -= (accel_bias[0] / 8);
+	accel_bias_reg[1] -= (accel_bias[1] / 8);
+	accel_bias_reg[2] -= (accel_bias[2] / 8);
+
+	accel_offset[0] = (accel_bias_reg[0] >> 8) & 0xFF;
+  	accel_offset[1] = (accel_bias_reg[0])      & 0xFE;
+	accel_offset[1] = accel_offset[1] | mask_bit[0];
+
+	accel_offset[2] = (accel_bias_reg[1] >> 8) & 0xFF;
+  	accel_offset[3] = (accel_bias_reg[1])      & 0xFE;
+	accel_offset[3] = accel_offset[3] | mask_bit[1];
+
+	accel_offset[4] = (accel_bias_reg[2] >> 8) & 0xFF;
+	accel_offset[5] = (accel_bias_reg[2])      & 0xFE;
+	accel_offset[5] = accel_offset[5] | mask_bit[2];
+
     i2c_write_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_H, accel_offset[0]);
     i2c_write_byte(SENSOR_ADDR, REG_ADD_XA_OFFS_L, accel_offset[1]);
     i2c_write_byte(SENSOR_ADDR, REG_ADD_YA_OFFS_H, accel_offset[2]);
@@ -559,7 +605,7 @@ void app_main()
     enable_fifo();
 	  
     // OFFSET GYRO
-    icm20948GyroCalibration();  
+    //icm20948GyroCalibration();  
     // OFFSET ACCEL
     icm20948AccelCalibration();
 	    
